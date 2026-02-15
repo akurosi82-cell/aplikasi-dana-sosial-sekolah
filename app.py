@@ -110,6 +110,7 @@ else:
         "BUKU KAS DANA SOSIAL",
         "BUKU KAS DHARMA WANITA",
         "BUKU KAS KORPRI",
+        "REKAP KAS BULANAN",
         "LAPORAN DANA SOSIAL",
         "LAPORAN DHARMA WANITA",
         "LAPORAN KORPRI",
@@ -154,47 +155,109 @@ else:
         if batal:
             st.rerun()
 
-    # ================= UPLOAD BUKTI TRANSAKSI =================
-    if menu == "UPLOAD BUKTI TRANSAKSI":
+    # ================= BUKU KAS =================
+    def tampil_buku(df,nama):
 
-        st.header("UPLOAD BUKTI TRANSAKSI")
+        if df.empty:
+            st.info("Belum ada data")
+            return
 
-        file = st.file_uploader("PILIH FILE BUKTI", type=["jpg","png","pdf"])
+        df = df.sort_values("TANGGAL")
+        df_show = df.copy()
+        df_show.insert(0,"NOMER",range(1,len(df_show)+1))
+        df_show["TANGGAL"] = pd.to_datetime(df_show["TANGGAL"]).dt.strftime("%Y-%m-%d")
 
-        if file is not None:
-            file_path = os.path.join("upload_bukti_transaksi", file.name)
-            with open(file_path, "wb") as f:
-                f.write(file.getbuffer())
-            st.success("FILE BERHASIL DIUPLOAD")
+        st.dataframe(df_show,use_container_width=True)
+        download_excel(df_show,nama)
 
-        files = os.listdir("upload_bukti_transaksi")
-        if files:
-            st.subheader("DAFTAR FILE")
-            for f in files:
-                with open(os.path.join("upload_bukti_transaksi", f), "rb") as file:
-                    st.download_button(f"DOWNLOAD {f}", file, f)
+        if st.button("HAPUS SEMUA DATA"):
+            df.drop(df.index,inplace=True)
+            st.success("DATA BERHASIL DIHAPUS")
+            st.rerun()
 
-    # ================= UPLOAD FOTO KEGIATAN =================
-    if menu == "UPLOAD FOTO KEGIATAN":
+    if menu=="BUKU KAS DANA SOSIAL":
+        tampil_buku(st.session_state["dana"],"BUKU_KAS_DANA_SOSIAL")
 
-        st.header("UPLOAD FOTO KEGIATAN")
+    if menu=="BUKU KAS DHARMA WANITA":
+        tampil_buku(st.session_state["dharma"],"BUKU_KAS_DHARMA_WANITA")
 
-        file = st.file_uploader("PILIH FOTO", type=["jpg","png"])
+    if menu=="BUKU KAS KORPRI":
+        tampil_buku(st.session_state["korpri"],"BUKU_KAS_KORPRI")
 
-        if file is not None:
-            file_path = os.path.join("upload_kegiatan", file.name)
-            with open(file_path, "wb") as f:
-                f.write(file.getbuffer())
-            st.success("FOTO BERHASIL DIUPLOAD")
+    # ================= REKAP KAS BULANAN (DIPISAH) =================
+    if menu == "REKAP KAS BULANAN":
 
-        files = os.listdir("upload_kegiatan")
-        if files:
-            st.subheader("DAFTAR FOTO")
-            for f in files:
-                with open(os.path.join("upload_kegiatan", f), "rb") as file:
-                    st.download_button(f"DOWNLOAD {f}", file, f)
+        jenis = st.selectbox("PILIH JENIS KAS",
+                             ["DANA SOSIAL","DHARMA WANITA","KORPRI"])
+
+        key = "dana" if jenis=="DANA SOSIAL" else \
+              "dharma" if jenis=="DHARMA WANITA" else "korpri"
+
+        df = st.session_state[key]
+
+        if df.empty:
+            st.info("Belum ada data")
+        else:
+            df["TANGGAL"]=pd.to_datetime(df["TANGGAL"])
+            df["BULAN"]=df["TANGGAL"].dt.month
+
+            rekap = df.groupby("BULAN")[["DEBET","KREDIT"]].sum().reset_index()
+            rekap["BULAN"]=rekap["BULAN"].map(bulan_indo)
+
+            st.dataframe(rekap,use_container_width=True)
+            download_excel(rekap,"REKAP_KAS_BULANAN")
+
+    # ================= LAPORAN =================
+    def laporan(df,nama):
+
+        if df.empty:
+            st.info("Belum ada data")
+            return
+
+        df["TANGGAL"]=pd.to_datetime(df["TANGGAL"])
+        tahun=df["TANGGAL"].dt.year.max()
+
+        laporan=[]
+        saldo_akhir_tahun=0
+
+        for bulan in range(1,13):
+
+            df_bulan=df[df["TANGGAL"].dt.month==bulan]
+            debet=df_bulan["DEBET"].sum()
+            kredit=df_bulan["KREDIT"].sum()
+            saldo=debet-kredit
+            saldo_akhir_tahun+=saldo
+
+            akhir=datetime(tahun,bulan,calendar.monthrange(tahun,bulan)[1])
+            uraian=f"SALDO AKHIR {bulan_indo[bulan]}"
+
+            laporan.append([
+                bulan,
+                akhir.strftime("%Y-%m-%d"),
+                uraian,
+                debet,
+                kredit,
+                saldo
+            ])
+
+        laporan.append(["","","SALDO AKHIR TAHUN","","",saldo_akhir_tahun])
+
+        df_laporan=pd.DataFrame(laporan,
+        columns=["NOMER","TANGGAL","URAIAN","DEBET","KREDIT","SALDO"])
+
+        st.dataframe(df_laporan,use_container_width=True)
+        download_excel(df_laporan,nama)
+
+    if menu=="LAPORAN DANA SOSIAL":
+        laporan(st.session_state["dana"].copy(),"LAPORAN_DANA_SOSIAL")
+
+    if menu=="LAPORAN DHARMA WANITA":
+        laporan(st.session_state["dharma"].copy(),"LAPORAN_DHARMA_WANITA")
+
+    if menu=="LAPORAN KORPRI":
+        laporan(st.session_state["korpri"].copy(),"LAPORAN_KORPRI")
 
     # ================= LOG OUT =================
-    if menu == "LOG OUT":
-        st.session_state.login = False
+    if menu=="LOG OUT":
+        st.session_state.login=False
         st.rerun()
