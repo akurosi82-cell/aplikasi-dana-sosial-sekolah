@@ -14,23 +14,24 @@ st.set_page_config(
 # ================= STYLE =================
 st.markdown("""
 <style>
+
 [data-testid="stAppViewContainer"] {
     background: linear-gradient(to right, #e3f2fd, #ffffff);
 }
+
+/* CENTER LOGIN TANPA BOX */
 .login-wrapper {
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
 }
-.login-box {
-    width: 420px;
-    padding: 40px;
-    background: white;
-    border-radius: 15px;
-    box-shadow: 0px 5px 20px rgba(0,0,0,0.2);
+
+.login-content {
     text-align: center;
+    width: 350px;
 }
+
 .stButton>button {
     background-color: #003366;
     color: white;
@@ -38,14 +39,17 @@ st.markdown("""
     height: 40px;
     width: 100%;
 }
+
 .stButton>button:hover {
     background-color: #0055aa;
 }
+
 h2,h3 {color:#003366;}
+
 </style>
 """, unsafe_allow_html=True)
 
-# ================= BULAN =================
+# ================= BULAN INDONESIA =================
 bulan_indo = {
 1:"JANUARI",2:"FEBRUARI",3:"MARET",4:"APRIL",
 5:"MEI",6:"JUNI",7:"JULI",8:"AGUSTUS",
@@ -74,7 +78,7 @@ def hitung_saldo(df):
     df["SALDO"] = saldo_list
     return df
 
-# ================= DOWNLOAD =================
+# ================= DOWNLOAD EXCEL =================
 def download_excel(df, nama):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -86,7 +90,7 @@ def download_excel(df, nama):
 if not st.session_state.login:
 
     st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
-    st.markdown('<div class="login-box">', unsafe_allow_html=True)
+    st.markdown('<div class="login-content">', unsafe_allow_html=True)
 
     st.image("logo.png", width=150)
     st.markdown("<h2>APLIKASI PENGELOLAAN KEUANGAN</h2>", unsafe_allow_html=True)
@@ -117,7 +121,7 @@ else:
         "LOG OUT"
     ])
 
-    # ================= INPUT =================
+    # ================= INPUT TRANSAKSI =================
     if menu == "INPUT TRANSAKSI":
 
         with st.form("form_transaksi"):
@@ -152,7 +156,7 @@ else:
         if batal:
             st.rerun()
 
-    # ================= BUKU KAS + REKAP BARU =================
+    # ================= BUKU KAS + REKAP =================
     def tampil_buku(df,nama):
 
         if df.empty:
@@ -168,14 +172,17 @@ else:
         st.dataframe(df_show,use_container_width=True)
         download_excel(df_show,nama)
 
-        # ================= REKAP BARU =================
+        if st.button("HAPUS DATA"):
+            df.drop(df.index,inplace=True)
+            st.success("DATA DIHAPUS")
+            st.rerun()
+
+        # ===== REKAP BULANAN FORMAT BARU =====
         st.subheader("REKAP KAS BULANAN")
 
         df["TANGGAL"] = pd.to_datetime(df["TANGGAL"])
         df["BULAN"] = df["TANGGAL"].dt.month
-        df["TAHUN"] = df["TANGGAL"].dt.year
-
-        tahun = df["TAHUN"].max()
+        tahun = df["TANGGAL"].dt.year.max()
 
         rekap_data = []
         saldo_berjalan = 0
@@ -187,8 +194,10 @@ else:
             kredit = df_bulan["KREDIT"].sum()
             saldo_berjalan += debet - kredit
 
-            tanggal_akhir = datetime(tahun,bulan,
-                            calendar.monthrange(tahun,bulan)[1])
+            tanggal_akhir = datetime(
+                tahun, bulan,
+                calendar.monthrange(tahun,bulan)[1]
+            )
 
             uraian = f"REKAP BULAN {bulan_indo[bulan]}"
 
@@ -201,8 +210,10 @@ else:
                 saldo_berjalan
             ])
 
-        df_rekap = pd.DataFrame(rekap_data,
-            columns=["NOMER","TANGGAL","URAIAN TRANSAKSI","DEBET","KREDIT","SALDO"])
+        df_rekap = pd.DataFrame(
+            rekap_data,
+            columns=["NOMER","TANGGAL","URAIAN TRANSAKSI","DEBET","KREDIT","SALDO"]
+        )
 
         st.dataframe(df_rekap,use_container_width=True)
         download_excel(df_rekap,f"REKAP_{nama}")
