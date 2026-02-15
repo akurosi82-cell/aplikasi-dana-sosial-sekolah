@@ -4,23 +4,14 @@ from datetime import datetime
 from io import BytesIO
 import calendar
 
-# GOOGLE DRIVE
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
-
-# =====================================================
-# KONFIGURASI HALAMAN
-# =====================================================
+# ================= KONFIGURASI =================
 st.set_page_config(
     page_title="Aplikasi Dana Sosial SMKN 1 Cermee",
     page_icon="💰",
     layout="wide"
 )
 
-# =====================================================
-# STYLE BACKGROUND ELEGAN
-# =====================================================
+# ================= STYLE =================
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] {
@@ -45,39 +36,14 @@ h1,h2,h3 {color:#003366;}
 </style>
 """, unsafe_allow_html=True)
 
-# =====================================================
-# BULAN INDONESIA
-# =====================================================
+# ================= BULAN INDONESIA =================
 bulan_indo = {
 1:"JANUARI",2:"FEBRUARI",3:"MARET",4:"APRIL",
 5:"MEI",6:"JUNI",7:"JULI",8:"AGUSTUS",
 9:"SEPTEMBER",10:"OKTOBER",11:"NOVEMBER",12:"DESEMBER"
 }
 
-# =====================================================
-# GOOGLE DRIVE SETUP
-# =====================================================
-SCOPES = ['https://www.googleapis.com/auth/drive']
-FOLDER_TRANSAKSI = "1AJ2ZjiFLNuTQufuPcEvFbdf-wFMtcr3c"
-FOLDER_KEGIATAN = "1W7Yg8VNOQeBhzoX5lVf3WrMDGmt6WDg5"
-
-def upload_to_drive(uploaded_file, folder_id):
-    credentials = service_account.Credentials.from_service_account_info(
-        st.secrets["gdrive"], scopes=SCOPES
-    )
-    service = build('drive', 'v3', credentials=credentials)
-
-    file_metadata = {
-        'name': uploaded_file.name,
-        'parents': [folder_id]
-    }
-
-    media = MediaIoBaseUpload(uploaded_file, mimetype=uploaded_file.type)
-    service.files().create(body=file_metadata, media_body=media).execute()
-
-# =====================================================
-# SESSION
-# =====================================================
+# ================= SESSION =================
 if "login" not in st.session_state:
     st.session_state.login = False
 
@@ -88,9 +54,7 @@ for kas in ["dana","dharma","korpri"]:
     if kas not in st.session_state:
         st.session_state[kas] = init_df()
 
-# =====================================================
-# HITUNG SALDO
-# =====================================================
+# ================= HITUNG SALDO =================
 def hitung_saldo(df):
     df = df.sort_values("TANGGAL")
     saldo = 0
@@ -101,9 +65,7 @@ def hitung_saldo(df):
     df["SALDO"] = saldo_list
     return df
 
-# =====================================================
-# DOWNLOAD EXCEL
-# =====================================================
+# ================= DOWNLOAD =================
 def download_excel(df, nama):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -111,14 +73,11 @@ def download_excel(df, nama):
     output.seek(0)
     st.download_button("DOWNLOAD EXCEL", output, f"{nama}.xlsx")
 
-# =====================================================
-# LOGIN PAGE
-# =====================================================
+# ================= LOGIN =================
 if not st.session_state.login:
 
     st.markdown('<div class="center-box">', unsafe_allow_html=True)
     st.image("logo.png", width=180)
-
     st.markdown("<h2>APLIKASI PENGELOLAAN KEUANGAN</h2>", unsafe_allow_html=True)
     st.markdown("<h3>SMK NEGERI 1 CERMEE BONDOWOSO</h3>", unsafe_allow_html=True)
 
@@ -135,9 +94,7 @@ if not st.session_state.login:
     st.markdown("<br><b>Created by : Admin Smakece</b>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-# =====================================================
-# HALAMAN UTAMA
-# =====================================================
+# ================= HALAMAN UTAMA =================
 else:
 
     st.sidebar.title("MENU UTAMA")
@@ -149,30 +106,23 @@ else:
         "LAPORAN DANA SOSIAL",
         "LAPORAN DHARMA WANITA",
         "LAPORAN KORPRI",
-        "UPLOAD FILE",
         "LOG OUT"
     ])
 
-    # ================= INPUT + TOMBOL BATAL =================
+    # ================= INPUT =================
     if menu == "INPUT TRANSAKSI":
 
-        st.subheader("FORM INPUT TRANSAKSI")
-
         with st.form("form_transaksi"):
-
             jenis = st.selectbox("JENIS KAS",
                                  ["DANA SOSIAL","DHARMA WANITA","KORPRI"])
-
             tanggal = st.date_input("TANGGAL")
             uraian = st.text_input("URAIAN TRANSAKSI")
             debet = st.number_input("DEBET (MASUK)", min_value=0)
             kredit = st.number_input("KREDIT (KELUAR)", min_value=0)
 
             col1, col2 = st.columns(2)
-            with col1:
-                simpan = st.form_submit_button("SIMPAN")
-            with col2:
-                batal = st.form_submit_button("BATAL")
+            simpan = col1.form_submit_button("SIMPAN")
+            batal = col2.form_submit_button("BATAL")
 
         if simpan:
             data = {
@@ -195,6 +145,86 @@ else:
         if batal:
             st.warning("INPUT DIBATALKAN")
             st.rerun()
+
+    # ================= BUKU KAS =================
+    def tampil_buku(df,nama):
+
+        if df.empty:
+            st.info("Belum ada data")
+            return
+
+        df = df.sort_values("TANGGAL")
+        df_show = df.copy()
+        df_show.insert(0,"NOMER",range(1,len(df_show)+1))
+        df_show["TANGGAL"] = pd.to_datetime(df_show["TANGGAL"]).dt.strftime("%Y-%m-%d")
+
+        st.dataframe(df_show,use_container_width=True)
+        download_excel(df_show,nama)
+
+        if st.button("HAPUS DATA"):
+            df.drop(df.index,inplace=True)
+            st.success("DATA DIHAPUS")
+            st.rerun()
+
+        # Rekap bulanan
+        st.subheader("REKAP KAS BULANAN")
+        df["BULAN"]=pd.to_datetime(df["TANGGAL"]).dt.month
+        rekap=df.groupby("BULAN")[["DEBET","KREDIT"]].sum().reset_index()
+        rekap["BULAN"]=rekap["BULAN"].map(bulan_indo)
+        st.dataframe(rekap,use_container_width=True)
+
+    if menu=="BUKU KAS DANA SOSIAL":
+        tampil_buku(st.session_state["dana"],"BUKU_KAS_DANA_SOSIAL")
+
+    if menu=="BUKU KAS DHARMA WANITA":
+        tampil_buku(st.session_state["dharma"],"BUKU_KAS_DHARMA_WANITA")
+
+    if menu=="BUKU KAS KORPRI":
+        tampil_buku(st.session_state["korpri"],"BUKU_KAS_KORPRI")
+
+    # ================= LAPORAN =================
+    def laporan(df,nama,label):
+
+        if df.empty:
+            st.info("Belum ada data")
+            return
+
+        df["TANGGAL"]=pd.to_datetime(df["TANGGAL"])
+        tahun=df["TANGGAL"].dt.year.max()
+        laporan=[]
+        saldo_akhir_tahun=0
+
+        for bulan in range(1,13):
+            df_bulan=df[df["TANGGAL"].dt.month==bulan]
+            debet=df_bulan["DEBET"].sum()
+            kredit=df_bulan["KREDIT"].sum()
+            saldo=debet-kredit
+            saldo_akhir_tahun+=saldo
+
+            akhir=datetime(tahun,bulan,calendar.monthrange(tahun,bulan)[1])
+            uraian=f"{label} AKHIR {bulan_indo[bulan]}"
+            laporan.append([bulan,akhir.strftime("%Y-%m-%d"),uraian,debet,kredit,saldo])
+
+        laporan.append(["","","SALDO AKHIR TAHUN","","",saldo_akhir_tahun])
+
+        df_laporan=pd.DataFrame(laporan,
+        columns=["NOMER","TANGGAL","URAIAN","DEBET","KREDIT","SALDO"])
+
+        st.dataframe(df_laporan,use_container_width=True)
+        download_excel(df_laporan,nama)
+
+        if st.button("HAPUS LAPORAN"):
+            st.success("LAPORAN AKAN DIHITUNG ULANG")
+            st.rerun()
+
+    if menu=="LAPORAN DANA SOSIAL":
+        laporan(st.session_state["dana"].copy(),"LAPORAN_DANA_SOSIAL","DANA SOSIAL")
+
+    if menu=="LAPORAN DHARMA WANITA":
+        laporan(st.session_state["dharma"].copy(),"LAPORAN_DHARMA_WANITA","DANA DHARMA WANITA")
+
+    if menu=="LAPORAN KORPRI":
+        laporan(st.session_state["korpri"].copy(),"LAPORAN_KORPRI","DANA KORPRI")
 
     # ================= LOG OUT =================
     if menu=="LOG OUT":
