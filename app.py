@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
-import calendar
 
 # GOOGLE DRIVE
 from google.oauth2 import service_account
@@ -19,7 +18,7 @@ st.set_page_config(
 )
 
 # =====================================
-# STYLE ELEGAN
+# STYLE
 # =====================================
 st.markdown("""
 <style>
@@ -39,10 +38,27 @@ st.markdown("""
 }
 .stButton>button:hover {
     background-color: #0055aa;
-    color: white;
 }
 </style>
 """, unsafe_allow_html=True)
+
+# =====================================
+# BULAN INDONESIA
+# =====================================
+bulan_indo = {
+    1: "JANUARI",
+    2: "FEBRUARI",
+    3: "MARET",
+    4: "APRIL",
+    5: "MEI",
+    6: "JUNI",
+    7: "JULI",
+    8: "AGUSTUS",
+    9: "SEPTEMBER",
+    10: "OKTOBER",
+    11: "NOVEMBER",
+    12: "DESEMBER"
+}
 
 # =====================================
 # GOOGLE DRIVE SETUP
@@ -63,7 +79,6 @@ def upload_to_drive(uploaded_file, folder_id):
     }
 
     media = MediaIoBaseUpload(uploaded_file, mimetype=uploaded_file.type)
-
     service.files().create(body=file_metadata, media_body=media).execute()
 
 # =====================================
@@ -103,7 +118,7 @@ def download_excel(df, nama):
     st.download_button("📥 DOWNLOAD EXCEL", output, f"{nama}.xlsx")
 
 # =====================================
-# LOGIN PAGE (TENGAH SEMPURNA)
+# LOGIN PAGE
 # =====================================
 if not st.session_state.login:
 
@@ -144,7 +159,7 @@ else:
         "LOGOUT"
     ])
 
-    # INPUT TRANSAKSI
+    # INPUT
     if menu == "INPUT TRANSAKSI":
         jenis = st.selectbox("JENIS KAS",["DANA SOSIAL","DHARMA WANITA","KORPRI"])
         tanggal = st.date_input("TANGGAL")
@@ -180,16 +195,13 @@ else:
         st.dataframe(df_show,use_container_width=True)
         download_excel(df_show,nama)
 
-        # REKAP BULANAN
+        # REKAP BULANAN INDONESIA
         st.subheader("REKAP KAS BULANAN")
         df["BULAN"]=pd.to_datetime(df["TANGGAL"]).dt.month
         rekap=df.groupby("BULAN")[["DEBET","KREDIT"]].sum().reset_index()
-        st.dataframe(rekap,use_container_width=True)
+        rekap["BULAN"]=rekap["BULAN"].map(bulan_indo)
 
-        if st.button("HAPUS DATA"):
-            df.drop(df.index,inplace=True)
-            st.success("Data Dihapus")
-            st.rerun()
+        st.dataframe(rekap,use_container_width=True)
 
     if menu=="BUKU KAS DANA SOSIAL":
         tampil_buku(st.session_state["dana"],"BUKU KAS DANA SOSIAL")
@@ -200,7 +212,7 @@ else:
     if menu=="BUKU KAS KORPRI":
         tampil_buku(st.session_state["korpri"],"BUKU KAS KORPRI")
 
-    # LAPORAN
+    # LAPORAN BULANAN
     def laporan(df,nama):
         if df.empty:
             st.info("Belum ada data")
@@ -218,20 +230,16 @@ else:
             saldo=debet-kredit
             saldo_akhir_tahun+=saldo
 
-            akhir=datetime(tahun,bulan,calendar.monthrange(tahun,bulan)[1]).strftime("%Y-%m-%d")
-            uraian=f"SALDO AKHIR {calendar.month_name[bulan].upper()}"
-            laporan.append([bulan,akhir,uraian,debet,kredit,saldo])
+            uraian=f"SALDO AKHIR {bulan_indo[bulan]}"
+            laporan.append([bulan,"",uraian,debet,kredit,saldo])
 
         laporan.append(["","","SALDO AKHIR TAHUN","","",saldo_akhir_tahun])
 
-        df_laporan=pd.DataFrame(laporan,columns=["NOMER","TANGGAL","URAIAN","DEBET","KREDIT","SALDO"])
+        df_laporan=pd.DataFrame(laporan,
+            columns=["NOMER","TANGGAL","URAIAN","DEBET","KREDIT","SALDO"])
 
         st.dataframe(df_laporan,use_container_width=True)
         download_excel(df_laporan,nama)
-
-        if st.button("HAPUS LAPORAN"):
-            st.success("Laporan Akan Dihitung Ulang")
-            st.rerun()
 
     if menu=="LAPORAN DANA SOSIAL":
         laporan(st.session_state["dana"].copy(),"LAPORAN DANA SOSIAL")
@@ -242,7 +250,7 @@ else:
     if menu=="LAPORAN KORPRI":
         laporan(st.session_state["korpri"].copy(),"LAPORAN KORPRI")
 
-    # UPLOAD FILE
+    # UPLOAD
     if menu=="UPLOAD FILE":
         st.subheader("UPLOAD BUKTI TRANSAKSI")
         file1=st.file_uploader("Upload Bukti Transaksi")
@@ -256,7 +264,6 @@ else:
             upload_to_drive(file2,FOLDER_KEGIATAN)
             st.success("Berhasil Upload")
 
-    # LOGOUT
     if menu=="LOGOUT":
         st.session_state.login=False
         st.rerun()
