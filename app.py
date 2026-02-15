@@ -119,7 +119,7 @@ else:
         "LOG OUT"
     ])
 
-    # ================= INPUT =================
+    # ================= INPUT TRANSAKSI =================
     if menu == "INPUT TRANSAKSI":
 
         with st.form("form_transaksi"):
@@ -184,8 +184,10 @@ else:
     if menu=="BUKU KAS KORPRI":
         tampil_buku(st.session_state["korpri"],"BUKU_KAS_KORPRI")
 
-    # ================= REKAP KAS BULANAN (DIPISAH) =================
+    # ================= REKAP KAS BULANAN =================
     if menu == "REKAP KAS BULANAN":
+
+        st.header("REKAP KAS BULANAN")
 
         jenis = st.selectbox("PILIH JENIS KAS",
                              ["DANA SOSIAL","DHARMA WANITA","KORPRI"])
@@ -198,14 +200,38 @@ else:
         if df.empty:
             st.info("Belum ada data")
         else:
-            df["TANGGAL"]=pd.to_datetime(df["TANGGAL"])
-            df["BULAN"]=df["TANGGAL"].dt.month
+            df = df.sort_values("TANGGAL")
+            df["TANGGAL"] = pd.to_datetime(df["TANGGAL"])
+            df["BULAN"] = df["TANGGAL"].dt.month
 
-            rekap = df.groupby("BULAN")[["DEBET","KREDIT"]].sum().reset_index()
-            rekap["BULAN"]=rekap["BULAN"].map(bulan_indo)
+            for bulan in range(1,13):
 
-            st.dataframe(rekap,use_container_width=True)
-            download_excel(rekap,"REKAP_KAS_BULANAN")
+                df_bulan = df[df["BULAN"] == bulan]
+
+                if not df_bulan.empty:
+
+                    st.subheader(f"BULAN {bulan_indo[bulan]}")
+
+                    df_show = df_bulan.copy()
+                    df_show = df_show.drop(columns=["BULAN"])
+                    df_show.insert(0,"NOMER",range(1,len(df_show)+1))
+                    df_show["TANGGAL"] = df_show["TANGGAL"].dt.strftime("%Y-%m-%d")
+
+                    df_show.columns = [
+                        "NOMER",
+                        "TANGGAL",
+                        "URAIAN",
+                        "DEBET",
+                        "KREDIT",
+                        "SALDO"
+                    ]
+
+                    st.dataframe(df_show,use_container_width=True)
+
+                    download_excel(
+                        df_show,
+                        f"REKAP_{jenis.replace(' ','_')}_{bulan_indo[bulan]}"
+                    )
 
     # ================= LAPORAN =================
     def laporan(df,nama):
@@ -256,6 +282,25 @@ else:
 
     if menu=="LAPORAN KORPRI":
         laporan(st.session_state["korpri"].copy(),"LAPORAN_KORPRI")
+
+    # ================= UPLOAD BUKTI =================
+    if menu == "UPLOAD BUKTI TRANSAKSI":
+
+        file = st.file_uploader("UPLOAD BUKTI TRANSAKSI", type=["jpg","png","pdf"])
+
+        if file:
+            with open(os.path.join("upload_bukti_transaksi", file.name), "wb") as f:
+                f.write(file.getbuffer())
+            st.success("FILE BERHASIL DIUPLOAD")
+
+    if menu == "UPLOAD FOTO KEGIATAN":
+
+        file = st.file_uploader("UPLOAD FOTO KEGIATAN", type=["jpg","png"])
+
+        if file:
+            with open(os.path.join("upload_kegiatan", file.name), "wb") as f:
+                f.write(file.getbuffer())
+            st.success("FOTO BERHASIL DIUPLOAD")
 
     # ================= LOG OUT =================
     if menu=="LOG OUT":
