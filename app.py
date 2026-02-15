@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import datetime
+import calendar
 from io import BytesIO
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -73,32 +74,12 @@ if st.sidebar.button("LOG OUT"):
     st.rerun()
 
 # ================= MENU =================
-menu = st.sidebar.radio("MENU", [
-    "DASHBOARD",
+menu = st.sidebar.selectbox("MENU", [
     "INPUT TRANSAKSI",
     "BUKU KAS",
     "LAPORAN",
     "UPLOAD FILE"
 ])
-
-# ================= DASHBOARD =================
-if menu == "DASHBOARD":
-    st.header("DASHBOARD KEUANGAN")
-
-    df = pd.read_sql_query("SELECT * FROM transaksi", conn)
-
-    total_masuk = df["debet"].sum() if not df.empty else 0
-    total_keluar = df["kredit"].sum() if not df.empty else 0
-    saldo = total_masuk - total_keluar
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("TOTAL PEMASUKAN", f"Rp {total_masuk:,.0f}")
-    col2.metric("TOTAL PENGELUARAN", f"Rp {total_keluar:,.0f}")
-    col3.metric("SALDO AKHIR", f"Rp {saldo:,.0f}")
-
-    if not df.empty:
-        chart_data = df.groupby("tanggal")[["debet","kredit"]].sum()
-        st.line_chart(chart_data)
 
 # ================= INPUT =================
 if menu == "INPUT TRANSAKSI":
@@ -152,34 +133,12 @@ if menu == "LAPORAN":
     df = pd.read_sql_query("SELECT * FROM transaksi WHERE jenis_kas=?", conn, params=(jenis,))
 
     if not df.empty:
-        df["bulan"] = pd.to_datetime(df["tanggal"]).dt.month
-        laporan = pd.DataFrame({"NOMER":[1],"TANGGAL":[datetime.date.today()],"URAIAN":["REKAP TAHUNAN"]})
+        df["tanggal"] = pd.to_datetime(df["tanggal"])
+        laporan_list = []
 
-        for i in range(1,13):
-            laporan[f"SALDO DEBET {i}"] = [df[df["bulan"]==i]["debet"].sum()]
-        for i in range(1,13):
-            laporan[f"SALDO KREDIT {i}"] = [df[df["bulan"]==i]["kredit"].sum()]
-
-        laporan["SALDO AKHIR"] = [df["debet"].sum()-df["kredit"].sum()]
-
-        st.dataframe(laporan, use_container_width=True)
-
-        output = BytesIO()
-        laporan.to_excel(output,index=False)
-        st.download_button("DOWNLOAD LAPORAN",output.getvalue(),file_name=f"LAPORAN_{jenis}.xlsx")
-
-# ================= UPLOAD =================
-if menu == "UPLOAD FILE":
-    st.subheader("UPLOAD BUKTI TRANSAKSI")
-    f1 = st.file_uploader("UPLOAD FILE TRANSAKSI")
-    if st.button("UPLOAD TRANSAKSI"):
-        if f1:
-            upload_drive(f1,FOLDER_TRANSAKSI)
-            st.success("BERHASIL UPLOAD")
-
-    st.subheader("UPLOAD FOTO KEGIATAN")
-    f2 = st.file_uploader("UPLOAD FOTO KEGIATAN")
-    if st.button("UPLOAD KEGIATAN"):
-        if f2:
-            upload_drive(f2,FOLDER_KEGIATAN)
-            st.success("BERHASIL UPLOAD")
+        for bulan in range(1,13):
+            akhir_bulan = datetime.date(datetime.date.today().year, bulan, calendar.monthrange(datetime.date.today().year, bulan)[1])
+            debet = df[df["tanggal"].dt.month==bulan]["debet"].sum()
+            kredit = df[df["tanggal"].dt.month==bulan]["kredit"].sum()
+            saldo = debet - kredit
+            laporan_list.append([bulan, akhir_bulan, debet, kr_]()_
