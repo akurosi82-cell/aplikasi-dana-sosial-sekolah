@@ -1,187 +1,152 @@
 import streamlit as st
 import pandas as pd
+import sqlite3
 from datetime import datetime
-import io
+from io import BytesIO
+import os
 
-st.set_page_config(page_title="Dana Sosial Sekolah", layout="wide")
+# ================== KONFIGURASI HALAMAN ==================
+st.set_page_config(page_title="Keuangan Dana Sosial", layout="wide")
 
-# ================= SESSION =================
-if "login" not in st.session_state:
-    st.session_state.login = False
+# ================== DATABASE ==================
+conn = sqlite3.connect('database.db', check_same_thread=False)
+c = conn.cursor()
 
-if "kas_dana_sosial" not in st.session_state:
-    st.session_state.kas_dana_sosial = []
+c.execute('''
+CREATE TABLE IF NOT EXISTS transaksi (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tanggal TEXT,
+    kategori TEXT,
+    uraian TEXT,
+    jenis TEXT,
+    nominal REAL
+)
+''')
+conn.commit()
 
-if "kas_dharma" not in st.session_state:
-    st.session_state.kas_dharma = []
+# ================== FUNGSI DOWNLOAD EXCEL ==================
+def download_excel(df, nama_file):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False)
+    output.seek(0)
 
-if "kas_korpri" not in st.session_state:
-    st.session_state.kas_korpri = []
+    st.download_button(
+        label="⬇ Download Excel",
+        data=output,
+        file_name=nama_file,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
-# ================= LOGIN PAGE =================
-if not st.session_state.login:
+# ================== LOGIN ==================
+def login():
 
-    st.markdown("<h1 style='text-align:center;'>SISTEM PENGELOLAAN KEUANGAN</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align:center;'>SMK NEGERI 1 CERMEE BONDOWOSO</h3>", unsafe_allow_html=True)
-
-    try:
-        st.image("assets/logo.png", width=150)
-    except:
-        st.warning("Logo tidak ditemukan. Pastikan ada di folder assets/logo.png")
-
-    st.markdown("### Login")
-
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-        if username == "admin" and password == "1234":
-            st.session_state.login = True
-            st.rerun()
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        if os.path.exists("logo.png"):
+            st.image("logo.png", width=200)
         else:
-            st.error("Username atau Password salah")
+            st.warning("File logo.png belum ada di folder utama")
 
-    st.markdown("---")
-    st.markdown("Created by : Admin Smakece")
+        st.markdown("<h2 style='text-align:center;'>SMK NEGERI 1 CERMEE</h2>", unsafe_allow_html=True)
+        st.markdown("<h4 style='text-align:center;'>APLIKASI PENGELOLAAN DANA SOSIAL SEKOLAH</h4>", unsafe_allow_html=True)
 
-# ================= MAIN APP =================
-else:
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+
+        if st.button("Login"):
+            if username == "admin" and password == "1234":
+                st.session_state["login"] = True
+                st.rerun()
+            else:
+                st.error("Username atau Password salah")
+
+        st.markdown("<p style='text-align:center;'>Created by : Admin Smakece</p>", unsafe_allow_html=True)
+
+# ================== DASHBOARD ==================
+def dashboard():
 
     st.sidebar.title("MENU")
-
-    menu = st.sidebar.selectbox("Pilih Menu",[
+    menu = st.sidebar.selectbox("Pilih Menu", [
+        "Buku Kas Umum",
+        "Kas KORPRI",
+        "Kas Dharma Wanita",
         "Input Transaksi",
-        "Buku Kas Dana Sosial",
-        "Buku Kas Dharma Wanita",
-        "Buku Kas KORPRI",
-        "Laporan",
-        "Upload File",
-        "Logout"
+        "Laporan"
     ])
 
-    # ========= FUNCTION TAMBAH DATA =========
-    def tambah_data(storage, nama):
-        st.header(f"INPUT {nama}")
+    # ================== INPUT TRANSAKSI ==================
+    if menu == "Input Transaksi":
+        st.header("Input Transaksi")
 
         tanggal = st.date_input("Tanggal Transaksi")
-        uraian = st.text_input("Uraian Transaksi")
-        debet = st.number_input("Debet (Masuk)",0)
-        kredit = st.number_input("Kredit (Keluar)",0)
+        kategori = st.selectbox("Kategori", ["Dana Sosial", "KORPRI", "Dharma Wanita"])
+        uraian = st.text_input("Uraian / Nama Transaksi")
+        jenis = st.radio("Jenis", ["Masuk", "Keluar"])
+        nominal = st.number_input("Nominal", min_value=0.0)
 
-        if st.button("Simpan"):
-            saldo = (storage[-1]["SALDO"] if storage else 0) + debet - kredit
+        if st.button("Simpan Transaksi"):
+            c.execute("INSERT INTO transaksi (tanggal,kategori,uraian,jenis,nominal) VALUES (?,?,?,?,?)",
+                      (str(tanggal), kategori, uraian, jenis, nominal))
+            conn.commit()
+            st.success("Transaksi berhasil disimpan")
 
-            storage.append({
-                "NOMER": len(storage)+1,
-                "TANGGAL": tanggal,
-                "URAIAN TRANSAKSI": uraian.upper(),
-                "DEBET": debet,
-                "KREDIT": kredit,
-                "SALDO": saldo
-            })
-
-            st.success("Data berhasil disimpan")
-
-    # ========= FUNCTION TABEL =========
-    def tampil_tabel(storage, nama):
-        st.header(nama)
-
-        if storage:
-            df = pd.DataFrame(storage)
-            st.dataframe(df, use_container_width=True)
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                output = io.BytesIO()
-                df.to_excel(output, index=False)
-                st.download_button(
-                    "Download Excel",
-                    output.getvalue(),
-                    f"{nama}.xlsx"
-                )
-
-            with col2:
-                if st.button("Hapus Semua Data"):
-                    storage.clear()
-                    st.rerun()
+    # ================== FUNGSI TAMPIL KAS ==================
+    def tampil_kas(filter_kategori=None):
+        if filter_kategori:
+            df = pd.read_sql(f"SELECT * FROM transaksi WHERE kategori='{filter_kategori}'", conn)
         else:
-            st.info("Belum ada data")
+            df = pd.read_sql("SELECT * FROM transaksi", conn)
 
-    # ========= MENU INPUT =========
-    if menu == "Input Transaksi":
+        if not df.empty:
+            df["Debet"] = df.apply(lambda x: x["nominal"] if x["jenis"]=="Masuk" else 0, axis=1)
+            df["Kredit"] = df.apply(lambda x: x["nominal"] if x["jenis"]=="Keluar" else 0, axis=1)
+            df["Saldo"] = df["Debet"].cumsum() - df["Kredit"].cumsum()
 
-        jenis = st.selectbox("Pilih Jenis Kas",[
-            "Dana Sosial","Dharma Wanita","KORPRI"
-        ])
+            df_view = df[["id","tanggal","uraian","Debet","Kredit","Saldo"]]
+            st.dataframe(df_view, use_container_width=True)
 
-        if jenis == "Dana Sosial":
-            tambah_data(st.session_state.kas_dana_sosial,"DANA SOSIAL")
+            download_excel(df_view, "buku_kas.xlsx")
+        else:
+            st.info("Belum ada transaksi")
 
-        elif jenis == "Dharma Wanita":
-            tambah_data(st.session_state.kas_dharma,"DHARMA WANITA")
+    # ================== MENU BUKU KAS ==================
+    elif menu == "Buku Kas Umum":
+        st.header("Buku Kas Umum (Semua Dana)")
+        tampil_kas()
 
-        elif jenis == "KORPRI":
-            tambah_data(st.session_state.kas_korpri,"KORPRI")
+    elif menu == "Kas KORPRI":
+        st.header("Kas Khusus KORPRI")
+        tampil_kas("KORPRI")
 
-    # ========= BUKU KAS =========
-    elif menu == "Buku Kas Dana Sosial":
-        tampil_tabel(st.session_state.kas_dana_sosial,"BUKU KAS DANA SOSIAL")
+    elif menu == "Kas Dharma Wanita":
+        st.header("Kas Khusus Dharma Wanita")
+        tampil_kas("Dharma Wanita")
 
-    elif menu == "Buku Kas Dharma Wanita":
-        tampil_tabel(st.session_state.kas_dharma,"BUKU KAS DHARMA WANITA")
-
-    elif menu == "Buku Kas KORPRI":
-        tampil_tabel(st.session_state.kas_korpri,"BUKU KAS KORPRI")
-
-    # ========= LAPORAN =========
+    # ================== LAPORAN ==================
     elif menu == "Laporan":
+        st.header("Laporan Keuangan")
 
-        st.header("LAPORAN")
+        df = pd.read_sql("SELECT * FROM transaksi", conn)
 
-        uraian = [
-            "SALDO DEBET JANUARI","SALDO DEBET PEBRUARI","SALDO DEBET MARET",
-            "SALDO DEBET APRIL","SALDO DEBET MEI","SALDO DEBET JUNI",
-            "SALDO DEBET JULI","SALDO DEBET AGUSTUS","SALDO DEBET SEPTEMBER",
-            "SALDO DEBET OKTOBER","SALDO DEBET NOVEMBER","SALDO DEBET DESEMBER",
-            "SALDO KREDIT JANUARI","SALDO KREDIT PEBRUARI","SALDO KREDIT MARET",
-            "SALDO KREDIT APRIL","SALDO KREDIT MEI","SALDO KREDIT JUNI",
-            "SALDO KREDIT JULI","SALDO KREDIT AGUSTUS","SALDO KREDIT SEPTEMBER",
-            "SALDO KREDIT OKTOBER","SALDO KREDIT NOVEMBER","SALDO KREDIT DESEMBER"
-        ]
+        if not df.empty:
+            total_masuk = df[df["jenis"]=="Masuk"]["nominal"].sum()
+            total_keluar = df[df["jenis"]=="Keluar"]["nominal"].sum()
+            saldo = total_masuk - total_keluar
 
-        df = pd.DataFrame({
-            "NOMER": range(1,len(uraian)+1),
-            "URAIAN TRANSAKSI": uraian,
-            "SALDO AKHIR": [0]*len(uraian)
-        })
+            st.metric("Total Penerimaan", f"Rp {total_masuk:,.0f}")
+            st.metric("Total Pengeluaran", f"Rp {total_keluar:,.0f}")
+            st.metric("Saldo Akhir", f"Rp {saldo:,.0f}")
 
-        edited = st.data_editor(df, use_container_width=True)
+            download_excel(df, "laporan_keuangan.xlsx")
+        else:
+            st.info("Belum ada data laporan")
 
-        output = io.BytesIO()
-        edited.to_excel(output,index=False)
+# ================== MAIN ==================
+if "login" not in st.session_state:
+    st.session_state["login"] = False
 
-        st.download_button(
-            "Download Laporan Excel",
-            output.getvalue(),
-            "laporan.xlsx"
-        )
-
-    # ========= UPLOAD =========
-    elif menu == "Upload File":
-
-        st.header("UPLOAD FILE")
-
-        bukti = st.file_uploader("Upload Bukti Transaksi")
-        kegiatan = st.file_uploader("Upload Foto Kegiatan")
-
-        if bukti:
-            st.success("Bukti transaksi berhasil diupload (simulasi)")
-
-        if kegiatan:
-            st.success("Foto kegiatan berhasil diupload (simulasi)")
-
-    # ========= LOGOUT =========
-    elif menu == "Logout":
-        st.session_state.login = False
-        st.rerun()
+if not st.session_state["login"]:
+    login()
+else:
+    dashboard()
