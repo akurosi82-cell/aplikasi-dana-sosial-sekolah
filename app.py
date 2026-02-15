@@ -1,15 +1,20 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from io import BytesIO
-import calendar
+import os
 
-# ================= KONFIGURASI =================
-st.set_page_config(
-    page_title="Aplikasi Dana Sosial SMKN 1 Cermee",
-    page_icon="💰",
-    layout="wide"
-)
+st.set_page_config(page_title="Dana Sosial Sekolah", layout="wide")
+
+# ================= SESSION =================
+if "login" not in st.session_state:
+    st.session_state.login = False
+
+if "data" not in st.session_state:
+    st.session_state.data = {
+        "Dana Sosial": [],
+        "Dharma Wanita": [],
+        "KORPRI": []
+    }
 
 # ================= STYLE =================
 st.markdown("""
@@ -19,24 +24,24 @@ st.markdown("""
     background: linear-gradient(to right, #e3f2fd, #ffffff);
 }
 
-/* CENTER LOGIN TANPA BOX */
+/* LOGIN STANDAR */
 .login-wrapper {
     display: flex;
     justify-content: center;
-    align-items: center;
-    height: 100vh;
+    margin-top: 80px;
 }
 
 .login-content {
+    width: 320px;
     text-align: center;
-    width: 350px;
 }
 
+/* Tombol */
 .stButton>button {
     background-color: #003366;
     color: white;
-    border-radius: 8px;
-    height: 40px;
+    border-radius: 6px;
+    height: 38px;
     width: 100%;
 }
 
@@ -49,50 +54,13 @@ h2,h3 {color:#003366;}
 </style>
 """, unsafe_allow_html=True)
 
-# ================= BULAN INDONESIA =================
-bulan_indo = {
-1:"JANUARI",2:"FEBRUARI",3:"MARET",4:"APRIL",
-5:"MEI",6:"JUNI",7:"JULI",8:"AGUSTUS",
-9:"SEPTEMBER",10:"OKTOBER",11:"NOVEMBER",12:"DESEMBER"
-}
-
-# ================= SESSION =================
-if "login" not in st.session_state:
-    st.session_state.login = False
-
-def init_df():
-    return pd.DataFrame(columns=["TANGGAL","URAIAN","DEBET","KREDIT","SALDO"])
-
-for kas in ["dana","dharma","korpri"]:
-    if kas not in st.session_state:
-        st.session_state[kas] = init_df()
-
-# ================= HITUNG SALDO =================
-def hitung_saldo(df):
-    df = df.sort_values("TANGGAL")
-    saldo = 0
-    saldo_list = []
-    for i in range(len(df)):
-        saldo += df.iloc[i]["DEBET"] - df.iloc[i]["KREDIT"]
-        saldo_list.append(saldo)
-    df["SALDO"] = saldo_list
-    return df
-
-# ================= DOWNLOAD EXCEL =================
-def download_excel(df, nama):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False)
-    output.seek(0)
-    st.download_button("DOWNLOAD EXCEL", output, f"{nama}.xlsx")
-
 # ================= LOGIN =================
 if not st.session_state.login:
 
     st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
     st.markdown('<div class="login-content">', unsafe_allow_html=True)
 
-    st.image("logo.png", width=150)
+    st.image("logo.png", width=120)
     st.markdown("<h2>APLIKASI PENGELOLAAN KEUANGAN</h2>", unsafe_allow_html=True)
     st.markdown("<h3>SMK NEGERI 1 CERMEE BONDOWOSO</h3>", unsafe_allow_html=True)
 
@@ -107,127 +75,137 @@ if not st.session_state.login:
             st.error("Username atau Password Salah")
 
     st.markdown("<br><small>Created by : Admin Smakece</small>", unsafe_allow_html=True)
+
     st.markdown("</div></div>", unsafe_allow_html=True)
 
-# ================= HALAMAN UTAMA =================
+# ================= MENU UTAMA =================
 else:
 
-    st.sidebar.title("MENU UTAMA")
-    menu = st.sidebar.selectbox("PILIH MENU",[
-        "INPUT TRANSAKSI",
-        "BUKU KAS DANA SOSIAL",
-        "BUKU KAS DHARMA WANITA",
-        "BUKU KAS KORPRI",
-        "LOG OUT"
+    st.sidebar.title("MENU")
+    menu = st.sidebar.selectbox("Pilih Menu", [
+        "Input Transaksi",
+        "Buku Kas",
+        "Rekap Kas Bulanan",
+        "Laporan Tahunan",
+        "Upload File"
     ])
 
-    # ================= INPUT TRANSAKSI =================
-    if menu == "INPUT TRANSAKSI":
-
-        with st.form("form_transaksi"):
-            jenis = st.selectbox("JENIS KAS",
-                                 ["DANA SOSIAL","DHARMA WANITA","KORPRI"])
-            tanggal = st.date_input("TANGGAL")
-            uraian = st.text_input("URAIAN TRANSAKSI")
-            debet = st.number_input("DEBET (MASUK)", min_value=0)
-            kredit = st.number_input("KREDIT (KELUAR)", min_value=0)
-
-            col1, col2 = st.columns(2)
-            simpan = col1.form_submit_button("SIMPAN")
-            batal = col2.form_submit_button("BATAL")
-
-        if simpan:
-            data = {
-                "TANGGAL": tanggal,
-                "URAIAN": uraian.upper(),
-                "DEBET": debet,
-                "KREDIT": kredit,
-                "SALDO": 0
-            }
-
-            key = "dana" if jenis=="DANA SOSIAL" else \
-                  "dharma" if jenis=="DHARMA WANITA" else "korpri"
-
-            df = st.session_state[key]
-            df = pd.concat([df, pd.DataFrame([data])], ignore_index=True)
-            st.session_state[key] = hitung_saldo(df)
-            st.success("DATA BERHASIL DISIMPAN")
-
-        if batal:
-            st.rerun()
-
-    # ================= BUKU KAS + REKAP =================
-    def tampil_buku(df,nama):
-
-        if df.empty:
-            st.info("Belum ada data")
-            return
-
-        df = df.sort_values("TANGGAL")
-        df_show = df.copy()
-        df_show.insert(0,"NOMER",range(1,len(df_show)+1))
-        df_show["TANGGAL"] = pd.to_datetime(df_show["TANGGAL"]).dt.strftime("%Y-%m-%d")
-
-        st.subheader("BUKU KAS")
-        st.dataframe(df_show,use_container_width=True)
-        download_excel(df_show,nama)
-
-        if st.button("HAPUS DATA"):
-            df.drop(df.index,inplace=True)
-            st.success("DATA DIHAPUS")
-            st.rerun()
-
-        # ===== REKAP BULANAN FORMAT BARU =====
-        st.subheader("REKAP KAS BULANAN")
-
-        df["TANGGAL"] = pd.to_datetime(df["TANGGAL"])
-        df["BULAN"] = df["TANGGAL"].dt.month
-        tahun = df["TANGGAL"].dt.year.max()
-
-        rekap_data = []
-        saldo_berjalan = 0
-
-        for bulan in range(1,13):
-            df_bulan = df[df["BULAN"]==bulan]
-
-            debet = df_bulan["DEBET"].sum()
-            kredit = df_bulan["KREDIT"].sum()
-            saldo_berjalan += debet - kredit
-
-            tanggal_akhir = datetime(
-                tahun, bulan,
-                calendar.monthrange(tahun,bulan)[1]
-            )
-
-            uraian = f"REKAP BULAN {bulan_indo[bulan]}"
-
-            rekap_data.append([
-                bulan,
-                tanggal_akhir.strftime("%Y-%m-%d"),
-                uraian,
-                debet,
-                kredit,
-                saldo_berjalan
-            ])
-
-        df_rekap = pd.DataFrame(
-            rekap_data,
-            columns=["NOMER","TANGGAL","URAIAN TRANSAKSI","DEBET","KREDIT","SALDO"]
-        )
-
-        st.dataframe(df_rekap,use_container_width=True)
-        download_excel(df_rekap,f"REKAP_{nama}")
-
-    if menu=="BUKU KAS DANA SOSIAL":
-        tampil_buku(st.session_state["dana"],"DANA_SOSIAL")
-
-    if menu=="BUKU KAS DHARMA WANITA":
-        tampil_buku(st.session_state["dharma"],"DHARMA_WANITA")
-
-    if menu=="BUKU KAS KORPRI":
-        tampil_buku(st.session_state["korpri"],"KORPRI")
-
-    # ================= LOG OUT =================
-    if menu=="LOG OUT":
-        st.session_state.login=False
+    if st.sidebar.button("LOG OUT"):
+        st.session_state.login = False
         st.rerun()
+
+    # ================= INPUT TRANSAKSI =================
+    if menu == "Input Transaksi":
+
+        st.header("INPUT TRANSAKSI")
+
+        jenis = st.selectbox("Pilih Buku Kas", ["Dana Sosial", "Dharma Wanita", "KORPRI"])
+        tanggal = st.date_input("Tanggal Transaksi")
+        uraian = st.text_input("Uraian Transaksi")
+        debet = st.number_input("Debet (Masuk)", min_value=0)
+        kredit = st.number_input("Kredit (Keluar)", min_value=0)
+
+        col1, col2 = st.columns(2)
+
+        if col1.button("SIMPAN"):
+            saldo_sebelumnya = sum([d["debet"] - d["kredit"] for d in st.session_state.data[jenis]])
+            saldo_baru = saldo_sebelumnya + debet - kredit
+
+            st.session_state.data[jenis].append({
+                "tanggal": tanggal,
+                "uraian": uraian,
+                "debet": debet,
+                "kredit": kredit,
+                "saldo": saldo_baru
+            })
+
+            st.success("Transaksi berhasil disimpan")
+
+        if col2.button("BATAL"):
+            st.rerun()
+
+    # ================= BUKU KAS =================
+    elif menu == "Buku Kas":
+
+        st.header("BUKU KAS")
+        jenis = st.selectbox("Pilih Buku Kas", ["Dana Sosial", "Dharma Wanita", "KORPRI"])
+
+        data = st.session_state.data[jenis]
+
+        if data:
+            df = pd.DataFrame(data)
+            df.insert(0, "NOMER", range(1, len(df)+1))
+            df.columns = ["NOMER", "TANGGAL", "URAIAN TRANSAKSI", "DEBET", "KREDIT", "SALDO"]
+            st.dataframe(df, use_container_width=True)
+
+            # Hapus data
+            nomor_hapus = st.number_input("Masukkan Nomor untuk Hapus", min_value=1, max_value=len(df))
+            if st.button("HAPUS"):
+                del st.session_state.data[jenis][nomor_hapus-1]
+                st.success("Data berhasil dihapus")
+                st.rerun()
+
+            # Download Excel
+            df.to_excel("buku_kas.xlsx", index=False)
+            with open("buku_kas.xlsx", "rb") as file:
+                st.download_button("Download Excel", file, file_name="buku_kas.xlsx")
+        else:
+            st.info("Belum ada data")
+
+    # ================= REKAP BULANAN =================
+    elif menu == "Rekap Kas Bulanan":
+
+        st.header("REKAP KAS BULANAN")
+        jenis = st.selectbox("Pilih Buku Kas", ["Dana Sosial", "Dharma Wanita", "KORPRI"])
+
+        data = st.session_state.data[jenis]
+
+        if data:
+            df = pd.DataFrame(data)
+            df.insert(0, "NOMER", range(1, len(df)+1))
+            df.columns = ["NOMER", "TANGGAL", "URAIAN TRANSAKSI", "DEBET", "KREDIT", "SALDO"]
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("Belum ada data")
+
+    # ================= LAPORAN =================
+    elif menu == "Laporan Tahunan":
+
+        st.header("LAPORAN TAHUNAN")
+
+        jenis = st.selectbox("Pilih Buku Kas", ["Dana Sosial", "Dharma Wanita", "KORPRI"])
+
+        bulan = ["Januari","Februari","Maret","April","Mei","Juni",
+                 "Juli","Agustus","September","Oktober","November","Desember"]
+
+        laporan = []
+        for i, b in enumerate(bulan):
+            laporan.append({
+                "NOMER": i+1,
+                "TANGGAL": b,
+                "URAIAN": f"SALDO AKHIR {b.upper()}",
+                "DEBET": 0,
+                "KREDIT": 0,
+                "SALDO": 0
+            })
+
+        df = pd.DataFrame(laporan)
+        st.dataframe(df, use_container_width=True)
+
+        df.to_excel("laporan_tahunan.xlsx", index=False)
+        with open("laporan_tahunan.xlsx", "rb") as file:
+            st.download_button("Download Laporan Excel", file, file_name="laporan_tahunan.xlsx")
+
+    # ================= UPLOAD =================
+    elif menu == "Upload File":
+
+        st.header("UPLOAD FILE")
+
+        bukti = st.file_uploader("Upload Bukti Transaksi")
+        kegiatan = st.file_uploader("Upload Foto Kegiatan")
+
+        if bukti:
+            st.success("Bukti Transaksi berhasil diupload")
+
+        if kegiatan:
+            st.success("Foto Kegiatan berhasil diupload")
