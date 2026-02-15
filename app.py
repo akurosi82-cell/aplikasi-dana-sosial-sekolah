@@ -1,221 +1,169 @@
 import streamlit as st
 import pandas as pd
+import sqlite3
 import datetime
-import os
 from io import BytesIO
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-# =========================
-# KONFIGURASI GOOGLE DRIVE
-# =========================
+# ================== KONFIG ==================
+st.set_page_config(page_title="APLIKASI KEUANGAN SMK", layout="wide")
 
 FOLDER_TRANSAKSI = "1AJ2ZjiFLNuTQufuPcEvFbdf-wFMtcr3c"
 FOLDER_KEGIATAN = "1W7Yg8VNOQeBhzoX5lVf3WrMDGmt6WDg5"
 
+# ================== DATABASE ==================
+conn = sqlite3.connect("database.db", check_same_thread=False)
+c = conn.cursor()
+
+c.execute('''CREATE TABLE IF NOT EXISTS transaksi
+             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+              tanggal TEXT,
+              jenis_kas TEXT,
+              uraian TEXT,
+              debet REAL,
+              kredit REAL,
+              saldo REAL)''')
+conn.commit()
+
+# ================== GOOGLE DRIVE ==================
 def connect_drive():
     credentials = service_account.Credentials.from_service_account_file(
         "service_account.json",
         scopes=["https://www.googleapis.com/auth/drive"]
     )
-    service = build("drive", "v3", credentials=credentials)
-    return service
+    return build("drive", "v3", credentials=credentials)
 
-def upload_to_drive(uploaded_file, folder_id):
+def upload_drive(file, folder_id):
     service = connect_drive()
+    file_metadata = {"name": file.name, "parents": [folder_id]}
+    media = MediaIoBaseUpload(file, mimetype=file.type)
+    service.files().create(body=file_metadata, media_body=media).execute()
 
-    file_metadata = {
-        "name": uploaded_file.name,
-        "parents": [folder_id]
-    }
-
-    media = MediaIoBaseUpload(
-        uploaded_file,
-        mimetype=uploaded_file.type,
-        resumable=True
-    )
-
-    file = service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields="id"
-    ).execute()
-
-    return file.get("id")
-
-# =========================
-# LOGIN SYSTEM
-# =========================
-
+# ================== LOGIN ==================
 if "login" not in st.session_state:
     st.session_state.login = False
 
 def login_page():
+    st.markdown("<div style='text-align:center'>", unsafe_allow_html=True)
     st.image("logo.png", width=150)
     st.title("APLIKASI PENGELOLAAN KEUANGAN")
-    st.subheader("SMK NEGERI 1 CERMEE")
+    st.subheader("SMK NEGERI 1 CERMEE BONDOWOSO")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    username = st.text_input("USERNAME")
+    password = st.text_input("PASSWORD", type="password")
 
-    if st.button("Login"):
+    if st.button("LOGIN"):
         if username == "admin" and password == "1234":
             st.session_state.login = True
-            st.success("Login Berhasil")
+            st.rerun()
         else:
-            st.error("Username atau Password salah")
+            st.error("USERNAME / PASSWORD SALAH")
 
-    st.markdown("---")
-    st.markdown("Created by : Admin Smakece")
+    st.markdown("<center>Created by : Admin Smakece</center>", unsafe_allow_html=True)
 
 if not st.session_state.login:
     login_page()
     st.stop()
 
-# =========================
-# DATABASE SEMENTARA
-# =========================
+# ================== LOGOUT ==================
+if st.sidebar.button("LOG OUT"):
+    st.session_state.login = False
+    st.rerun()
 
-if "data" not in st.session_state:
-    st.session_state.data = pd.DataFrame(columns=[
-        "Tanggal", "Jenis Kas", "Uraian",
-        "Debet", "Kredit", "Saldo"
-    ])
-
-# =========================
-# SIDEBAR MENU
-# =========================
-
-menu = st.sidebar.selectbox("Menu", [
-    "Dashboard",
-    "Input Transaksi",
-    "Upload Bukti Kegiatan",
-    "Laporan"
+# ================== MENU ==================
+menu = st.sidebar.selectbox("MENU", [
+    "INPUT TRANSAKSI",
+    "BUKU KAS",
+    "LAPORAN",
+    "UPLOAD FILE"
 ])
 
-# =========================
-# DASHBOARD
-# =========================
+# ================== INPUT ==================
+if menu == "INPUT TRANSAKSI":
+    st.header("INPUT TRANSAKSI")
 
-if menu == "Dashboard":
-    st.title("Buku Kas Umum")
+    tanggal = st.date_input("TANGGAL", datetime.date.today())
+    jenis_kas = st.selectbox("JENIS KAS", ["DANA SOSIAL", "DHARMA WANITA", "KORPRI"])
+    uraian = st.text_input("URAIAN")
+    tipe = st.radio("JENIS", ["MASUK", "KELUAR"])
+    nominal = st.number_input("NOMINAL", min_value=0)
 
-    df = st.session_state.data
+    if st.button("SIMPAN"):
+        c.execute("SELECT saldo FROM transaksi WHERE jenis_kas=? ORDER BY id DESC LIMIT 1", (jenis_kas,))
+        last = c.fetchone()
+        saldo_awal = last[0] if last else 0
 
+        debet = nominal if tipe == "MASUK" else 0
+        kredit = nominal if tipe == "KELUAR" else 0
+        saldo_baru = saldo_awal + debet - kredit
+
+        c.execute("INSERT INTO transaksi (tanggal,jenis_kas,uraian,debet,kredit,saldo) VALUES (?,?,?,?,?,?)",
+                  (str(tanggal), jenis_kas, uraian, debet, kredit, saldo_baru))
+        conn.commit()
+        st.success("DATA BERHASIL DISIMPAN")
+
+# ================== BUKU KAS ==================
+if menu == "BUKU KAS":
+    jenis = st.selectbox("PILIH BUKU KAS", ["DANA SOSIAL", "DHARMA WANITA", "KORPRI"])
+
+    df = pd.read_sql_query("SELECT * FROM transaksi WHERE jenis_kas=?", conn, params=(jenis,))
     if not df.empty:
-        df["No"] = range(1, len(df) + 1)
-        df = df[["No","Tanggal","Jenis Kas","Uraian","Debet","Kredit","Saldo"]]
+        df["NOMER"] = range(1, len(df)+1)
+        df = df[["NOMER","tanggal","uraian","debet","kredit","saldo"]]
+        df.columns = ["NOMER","TANGGAL","URAIAN","DEBET","KREDIT","SALDO"]
 
     st.dataframe(df, use_container_width=True)
 
-    # Download Excel
+    if st.button("HAPUS SEMUA DATA"):
+        c.execute("DELETE FROM transaksi WHERE jenis_kas=?", (jenis,))
+        conn.commit()
+        st.warning("DATA DIHAPUS")
+
     output = BytesIO()
     df.to_excel(output, index=False)
+    st.download_button("DOWNLOAD EXCEL", output.getvalue(), file_name=f"BUKU_KAS_{jenis}.xlsx")
 
-    st.download_button(
-        label="Download Excel",
-        data=output.getvalue(),
-        file_name="buku_kas.xlsx"
-    )
+# ================== LAPORAN ==================
+if menu == "LAPORAN":
+    jenis = st.selectbox("PILIH LAPORAN", ["DANA SOSIAL", "DHARMA WANITA", "KORPRI"])
+    df = pd.read_sql_query("SELECT * FROM transaksi WHERE jenis_kas=?", conn, params=(jenis,))
 
-# =========================
-# INPUT TRANSAKSI
-# =========================
+    if not df.empty:
+        df["bulan"] = pd.to_datetime(df["tanggal"]).dt.month
 
-if menu == "Input Transaksi":
-    st.title("Input Transaksi")
+        laporan = pd.DataFrame()
+        laporan["NOMER"] = [1]
+        laporan["TANGGAL"] = [datetime.date.today()]
+        laporan["URAIAN"] = ["REKAP TAHUNAN"]
 
-    tanggal = st.date_input("Tanggal", datetime.date.today())
-    jenis_kas = st.selectbox("Jenis Kas", [
-        "Dana Sosial", "KORPRI", "Dharma Wanita"
-    ])
-    uraian = st.text_input("Uraian Transaksi")
-    tipe = st.radio("Jenis", ["Masuk", "Keluar"])
-    nominal = st.number_input("Nominal", min_value=0)
+        for i in range(1,13):
+            laporan[f"SALDO DEBET {i}"] = [df[df["bulan"]==i]["debet"].sum()]
+        for i in range(1,13):
+            laporan[f"SALDO KREDIT {i}"] = [df[df["bulan"]==i]["kredit"].sum()]
 
-    bukti = st.file_uploader("Upload Bukti Transaksi")
-
-    if st.button("Simpan"):
-        debet = nominal if tipe == "Masuk" else 0
-        kredit = nominal if tipe == "Keluar" else 0
-
-        saldo_awal = 0
-        if not st.session_state.data.empty:
-            saldo_awal = st.session_state.data.iloc[-1]["Saldo"]
-
-        saldo_baru = saldo_awal + debet - kredit
-
-        new_data = pd.DataFrame([{
-            "Tanggal": tanggal,
-            "Jenis Kas": jenis_kas,
-            "Uraian": uraian,
-            "Debet": debet,
-            "Kredit": kredit,
-            "Saldo": saldo_baru
-        }])
-
-        st.session_state.data = pd.concat(
-            [st.session_state.data, new_data],
-            ignore_index=True
-        )
-
-        # Upload ke Google Drive
-        if bukti is not None:
-            upload_to_drive(bukti, FOLDER_TRANSAKSI)
-            st.success("Bukti berhasil diupload ke Google Drive")
-
-        st.success("Transaksi berhasil disimpan")
-
-# =========================
-# UPLOAD BUKTI KEGIATAN
-# =========================
-
-if menu == "Upload Bukti Kegiatan":
-    st.title("Upload Bukti Kegiatan")
-
-    file_kegiatan = st.file_uploader("Upload Bukti Kegiatan")
-
-    if st.button("Upload"):
-        if file_kegiatan is not None:
-            upload_to_drive(file_kegiatan, FOLDER_KEGIATAN)
-            st.success("Bukti kegiatan berhasil diupload")
-
-# =========================
-# LAPORAN
-# =========================
-
-if menu == "Laporan":
-    st.title("Laporan Keuangan")
-
-    df = st.session_state.data
-
-    if df.empty:
-        st.warning("Belum ada data")
-    else:
-        total_masuk = df["Debet"].sum()
-        total_keluar = df["Kredit"].sum()
-        saldo_akhir = total_masuk - total_keluar
-
-        laporan = df.copy()
-        laporan["Nominal"] = laporan["Debet"] + laporan["Kredit"]
-
-        laporan["No"] = range(1, len(laporan) + 1)
-        laporan = laporan[[
-            "No","Tanggal","Uraian","Nominal"
-        ]]
+        laporan["SALDO AKHIR"] = [df["debet"].sum()-df["kredit"].sum()]
 
         st.dataframe(laporan, use_container_width=True)
 
-        st.write("Total Penerimaan:", total_masuk)
-        st.write("Total Pengeluaran:", total_keluar)
-        st.write("Saldo Akhir:", saldo_akhir)
-
         output = BytesIO()
         laporan.to_excel(output, index=False)
+        st.download_button("DOWNLOAD LAPORAN EXCEL", output.getvalue(), file_name=f"LAPORAN_{jenis}.xlsx")
 
-        st.download_button(
-            label="Download Laporan Excel",
-            data=output.getvalue(),
-            file_name="laporan_keuangan.xlsx"
-        )
+# ================== UPLOAD FILE ==================
+if menu == "UPLOAD FILE":
+    st.subheader("UPLOAD BUKTI TRANSAKSI")
+    file1 = st.file_uploader("UPLOAD BUKTI TRANSAKSI")
+    if st.button("UPLOAD TRANSAKSI"):
+        if file1:
+            upload_drive(file1, FOLDER_TRANSAKSI)
+            st.success("BERHASIL UPLOAD")
+
+    st.subheader("UPLOAD FOTO KEGIATAN")
+    file2 = st.file_uploader("UPLOAD FOTO KEGIATAN")
+    if st.button("UPLOAD KEGIATAN"):
+        if file2:
+            upload_drive(file2, FOLDER_KEGIATAN)
+            st.success("BERHASIL UPLOAD")
