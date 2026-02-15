@@ -9,14 +9,44 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-# =============================
-# KONFIGURASI
-# =============================
-st.set_page_config(page_title="Dana Sosial Sekolah", layout="wide")
+# =====================================
+# KONFIGURASI HALAMAN
+# =====================================
+st.set_page_config(
+    page_title="Aplikasi Dana Sosial Sekolah",
+    page_icon="💰",
+    layout="wide"
+)
 
-# =============================
+# =====================================
+# STYLE ELEGAN
+# =====================================
+st.markdown("""
+<style>
+.main {background-color: #f4f6f9;}
+.center-box {
+    width: 420px;
+    margin: auto;
+    text-align: center;
+    padding-top: 60px;
+}
+.stButton>button {
+    background-color: #003366;
+    color: white;
+    border-radius: 8px;
+    height: 3em;
+    width: 100%;
+}
+.stButton>button:hover {
+    background-color: #0055aa;
+    color: white;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =====================================
 # GOOGLE DRIVE SETUP
-# =============================
+# =====================================
 SCOPES = ['https://www.googleapis.com/auth/drive']
 FOLDER_TRANSAKSI = "1AJ2ZjiFLNuTQufuPcEvFbdf-wFMtcr3c"
 FOLDER_KEGIATAN = "1W7Yg8VNOQeBhzoX5lVf3WrMDGmt6WDg5"
@@ -36,9 +66,9 @@ def upload_to_drive(uploaded_file, folder_id):
 
     service.files().create(body=file_metadata, media_body=media).execute()
 
-# =============================
+# =====================================
 # SESSION
-# =============================
+# =====================================
 if "login" not in st.session_state:
     st.session_state.login = False
 
@@ -49,9 +79,9 @@ for kas in ["dana","dharma","korpri"]:
     if kas not in st.session_state:
         st.session_state[kas] = init_df()
 
-# =============================
+# =====================================
 # HITUNG SALDO
-# =============================
+# =====================================
 def hitung_saldo(df):
     df = df.sort_values("TANGGAL")
     saldo = 0
@@ -62,43 +92,43 @@ def hitung_saldo(df):
     df["SALDO"] = saldo_list
     return df
 
-# =============================
+# =====================================
 # DOWNLOAD EXCEL
-# =============================
+# =====================================
 def download_excel(df, nama):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False)
     output.seek(0)
-
     st.download_button("📥 DOWNLOAD EXCEL", output, f"{nama}.xlsx")
 
-# =============================
-# LOGIN PAGE
-# =============================
+# =====================================
+# LOGIN PAGE (TENGAH SEMPURNA)
+# =====================================
 if not st.session_state.login:
 
-    col1,col2,col3 = st.columns([1,2,1])
-    with col2:
-        st.image("logo.png", width=200)
-        st.markdown("<h2 style='text-align:center;'>APLIKASI PENGELOLAAN DANA SOSIAL SEKOLAH</h2>", unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align:center;'>SMK NEGERI 1 CERMEE BONDOWOSO</h3>", unsafe_allow_html=True)
+    st.markdown('<div class="center-box">', unsafe_allow_html=True)
 
-        username = st.text_input("USERNAME")
-        password = st.text_input("PASSWORD", type="password")
+    st.image("logo.png", width=180)
+    st.markdown("<h2>APLIKASI PENGELOLAAN DANA SOSIAL SEKOLAH</h2>", unsafe_allow_html=True)
+    st.markdown("<h3>SMK NEGERI 1 CERMEE BONDOWOSO</h3>", unsafe_allow_html=True)
 
-        if st.button("LOGIN"):
-            if username=="admin" and password=="1234":
-                st.session_state.login=True
-                st.rerun()
-            else:
-                st.error("Username / Password Salah")
+    username = st.text_input("USERNAME")
+    password = st.text_input("PASSWORD", type="password")
 
-        st.markdown("<center>Created by : Admin Smakece</center>", unsafe_allow_html=True)
+    if st.button("LOGIN"):
+        if username == "admin" and password == "1234":
+            st.session_state.login = True
+            st.rerun()
+        else:
+            st.error("Username / Password Salah")
 
-# =============================
+    st.markdown("<br><b>Created by : Admin Smakece</b>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# =====================================
 # HALAMAN UTAMA
-# =============================
+# =====================================
 else:
 
     st.sidebar.title("MENU")
@@ -114,10 +144,8 @@ else:
         "LOGOUT"
     ])
 
-    # =============================
     # INPUT TRANSAKSI
-    # =============================
-    if menu=="INPUT TRANSAKSI":
+    if menu == "INPUT TRANSAKSI":
         jenis = st.selectbox("JENIS KAS",["DANA SOSIAL","DHARMA WANITA","KORPRI"])
         tanggal = st.date_input("TANGGAL")
         uraian = st.text_input("URAIAN")
@@ -132,16 +160,13 @@ else:
                 "KREDIT":kredit,
                 "SALDO":0
             }
-
             key="dana" if jenis=="DANA SOSIAL" else "dharma" if jenis=="DHARMA WANITA" else "korpri"
             df=st.session_state[key]
             df=pd.concat([df,pd.DataFrame([data])],ignore_index=True)
             st.session_state[key]=hitung_saldo(df)
             st.success("Data Disimpan")
 
-    # =============================
     # BUKU KAS
-    # =============================
     def tampil_buku(df,nama):
         if df.empty:
             st.info("Belum ada data")
@@ -175,9 +200,7 @@ else:
     if menu=="BUKU KAS KORPRI":
         tampil_buku(st.session_state["korpri"],"BUKU KAS KORPRI")
 
-    # =============================
     # LAPORAN
-    # =============================
     def laporan(df,nama):
         if df.empty:
             st.info("Belum ada data")
@@ -207,7 +230,7 @@ else:
         download_excel(df_laporan,nama)
 
         if st.button("HAPUS LAPORAN"):
-            st.success("Laporan Akan Dihitung Ulang Otomatis")
+            st.success("Laporan Akan Dihitung Ulang")
             st.rerun()
 
     if menu=="LAPORAN DANA SOSIAL":
@@ -219,9 +242,7 @@ else:
     if menu=="LAPORAN KORPRI":
         laporan(st.session_state["korpri"].copy(),"LAPORAN KORPRI")
 
-    # =============================
     # UPLOAD FILE
-    # =============================
     if menu=="UPLOAD FILE":
         st.subheader("UPLOAD BUKTI TRANSAKSI")
         file1=st.file_uploader("Upload Bukti Transaksi")
@@ -235,9 +256,7 @@ else:
             upload_to_drive(file2,FOLDER_KEGIATAN)
             st.success("Berhasil Upload")
 
-    # =============================
     # LOGOUT
-    # =============================
     if menu=="LOGOUT":
         st.session_state.login=False
         st.rerun()
