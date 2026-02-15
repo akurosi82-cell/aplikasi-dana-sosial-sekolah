@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import datetime
-import plotly.express as px
 from io import BytesIO
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -98,8 +97,8 @@ if menu == "DASHBOARD":
     col3.metric("SALDO AKHIR", f"Rp {saldo:,.0f}")
 
     if not df.empty:
-        fig = px.bar(df, x="tanggal", y=["debet","kredit"], barmode="group")
-        st.plotly_chart(fig, use_container_width=True)
+        chart_data = df.groupby("tanggal")[["debet","kredit"]].sum()
+        st.line_chart(chart_data)
 
 # ================= INPUT =================
 if menu == "INPUT TRANSAKSI":
@@ -134,6 +133,7 @@ if menu == "BUKU KAS":
         df["NOMER"] = range(1,len(df)+1)
         df = df[["id","NOMER","tanggal","uraian","debet","kredit","saldo"]]
         df.columns = ["ID","NOMER","TANGGAL","URAIAN","DEBET","KREDIT","SALDO"]
+
         st.dataframe(df.drop(columns=["ID"]), use_container_width=True)
 
         id_hapus = st.number_input("MASUKKAN ID YANG AKAN DIHAPUS", min_value=0)
@@ -156,9 +156,9 @@ if menu == "LAPORAN":
         laporan = pd.DataFrame({"NOMER":[1],"TANGGAL":[datetime.date.today()],"URAIAN":["REKAP TAHUNAN"]})
 
         for i in range(1,13):
-            laporan[f"DEBET {i}"] = [df[df["bulan"]==i]["debet"].sum()]
+            laporan[f"SALDO DEBET {i}"] = [df[df["bulan"]==i]["debet"].sum()]
         for i in range(1,13):
-            laporan[f"KREDIT {i}"] = [df[df["bulan"]==i]["kredit"].sum()]
+            laporan[f"SALDO KREDIT {i}"] = [df[df["bulan"]==i]["kredit"].sum()]
 
         laporan["SALDO AKHIR"] = [df["debet"].sum()-df["kredit"].sum()]
 
